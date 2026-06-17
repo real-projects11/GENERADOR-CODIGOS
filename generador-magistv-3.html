@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generador de Código MagisTV / XuperTV</title>
+
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,800;0,900;1,900&family=JetBrains+Mono:wght@700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script>
+  /* ─── Tailwind config ─────────────────────────────────────── */
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          hero: ["'Barlow Condensed'", "Arial Narrow", "sans-serif"],
+          mono: ["'JetBrains Mono'", "monospace"],
+          body: ["'Inter'", "sans-serif"],
+        },
+        colors: {
+          brand:   "#0a0a0a",
+          accent:  "#e8000d",
+          success: "#00c896",
+          muted:   "#888888",
+          bg:      "#e8e8ed",
+        },
+        keyframes: {
+          popIn:    { from: { transform: "scale(0.88)", opacity: "0" }, to: { transform: "scale(1)", opacity: "1" } },
+          fadeSwap: { "0%,100%": { opacity: "1" }, "40%,60%": { opacity: "0" } },
+          pulse2:   { "0%,100%": { boxShadow: "0 0 0 0 rgba(0,200,150,0.4)" }, "50%": { boxShadow: "0 0 0 10px rgba(0,200,150,0)" } },
+        },
+        animation: {
+          popIn:    "popIn 0.3s cubic-bezier(.22,.68,0,1.2) forwards",
+          fadeSwap: "fadeSwap 0.5s ease forwards",
+          pulse2:   "pulse2 1.5s infinite",
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  /* ─── Base ─────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", sans-serif; background: #e8e8ed; min-height: 100vh; }
+
+  /* ─── Ring SVG countdown ───────────────────────────────────── */
+  .ring-progress {
+    fill: none;
+    stroke: #0a0a0a;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 176;
+    stroke-dashoffset: 0;
+    transform: rotate(-90deg);
+    transform-origin: 30px 30px;
+    transition: stroke-dashoffset 1s linear;
+  }
+  .ring-bg { fill: none; stroke: #e0e0e0; stroke-width: 5; }
+
+  /* ─── Video container ──────────────────────────────────────── */
+  #video-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #111;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #ad-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  /* VAST iframe (for ad networks) */
+  #vast-iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+  /* Overlay label */
+  #pub-label {
+    position: absolute;
+    top: 8px; left: 10px;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.6);
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* ─── Step dots ───────────────────────────────────────────── */
+  .step-dot { width: 8px; height: 8px; border-radius: 4px; background: #e0e0e0; transition: all 0.3s; }
+  .step-dot.active { background: #0a0a0a; width: 22px; border-radius: 4px; }
+  .step-dot.done   { background: #00c896; }
+
+  /* ─── Skip button states ──────────────────────────────────── */
+  #btn-skip {
+    width: 100%;
+    padding: 14px;
+    border-radius: 13px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: not-allowed;
+    background: #f0f0f0;
+    border: 1.5px solid #ddd;
+    color: #aaa;
+    transition: all 0.35s;
+  }
+  #btn-skip.ready {
+    background: #0a0a0a;
+    border-color: #0a0a0a;
+    color: #fff;
+    cursor: pointer;
+    animation: pulse2 1.5s infinite;
+  }
+
+  /* ─── Code box ────────────────────────────────────────────── */
+  .code-number {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: 7px;
+    color: #0a0a0a;
+  }
+
+  /* ─── Brand swap ──────────────────────────────────────────── */
+  .swapping { animation: fadeSwap 0.5s ease forwards; }
+
+  /* ─── Modal animation ─────────────────────────────────────── */
+  .sheet { animation: popIn 0.3s cubic-bezier(.22,.68,0,1.2) forwards; }
+
+  /* ─── Progress bar on video ───────────────────────────────── */
+  #video-progress-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 3px;
+    background: #e8000d;
+    width: 0%;
+    transition: width 1s linear;
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     NAV
+     ════════════════════════════════════════════════════════════ -->
+<nav class="flex items-center justify-between px-5 py-4 border-b border-black/8">
+  <div id="brand-nav"
+       class="font-hero font-black text-2xl uppercase tracking-wider text-brand leading-none">
+    MagisTV
+  </div>
+  <!-- Hamburger decorativo -->
+  <button class="flex flex-col gap-[5px] p-1" aria-label="Menú">
+    <span class="block w-[22px] h-[2px] bg-brand rounded-full"></span>
+    <span class="block w-[22px] h-[2px] bg-brand rounded-full"></span>
+    <span class="block w-[22px] h-[2px] bg-brand rounded-full"></span>
+  </button>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════
+     HERO
+     ════════════════════════════════════════════════════════════ -->
+<section class="flex flex-col items-center px-4 pt-5 pb-0 text-center gap-6">
+  <h1 class="font-hero font-black uppercase leading-[1.05] tracking-wide text-brand"
+      style="font-size: clamp(34px, 9.5vw, 54px)">
+    OBTEN TU <span class="text-accent italic">CÓDIGO</span> PARA<br>MAGISTV Y XUPERTV
+  </h1>
+
+  <!-- CTA principal -->
+  <button id="btn-main" onclick="openSheet()"
+    class="inline-flex items-center gap-2.5 bg-brand border-[2.5px] border-brand
+           pl-6 pr-[6px] py-[6px] rounded-full shadow-xl
+           hover:-translate-y-0.5 hover:shadow-2xl active:translate-y-0
+           transition-all duration-150 focus:outline-none">
+    <span class="font-hero font-black text-xl uppercase tracking-widest text-white whitespace-nowrap">
+      GENERAR CODIGO
+    </span>
+    <span class="w-11 h-11 rounded-full bg-white border-[2.5px] border-brand
+                 flex items-center justify-center shrink-0">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+           stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </span>
+  </button>
+
+
+</section>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     OVERLAY / MODAL
+     ════════════════════════════════════════════════════════════ -->
+<div id="overlay"
+     class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-sm
+            flex items-center justify-center px-4 py-6"
+     onclick="handleOverlayClick(event)">
+
+  <div class="sheet bg-white rounded-[20px] w-full max-w-[360px]
+              px-5 pb-7 pt-6 overflow-y-auto max-h-[92vh]">
+
+    <!-- Dots de paso -->
+    <div class="flex items-center justify-center gap-1.5 mb-5">
+      <div class="step-dot active" id="dot1"></div>
+      <div class="step-dot"        id="dot2"></div>
+    </div>
+
+    <!-- ── STEP 1: Anuncio ─────────────────────────────────── -->
+    <div id="step-ad">
+      <p class="text-center text-[13px] text-muted mb-3 leading-snug">
+        Mirá el anuncio para desbloquear tu código
+      </p>
+
+      <!-- ── VIDEO / VAST ──────────────────────────────────────
+           OPCIÓN A: Video directo (demo). Reemplazar src por tu anuncio real.
+           OPCIÓN B: VAST tag — ver comentario abajo.
+           ────────────────────────────────────────────────────── -->
+      <div id="video-wrapper" class="mb-4">
+
+        <!-- OPCIÓN A ▸ VIDEO DIRECTO ─────────────────────────
+             Reemplazá src por la URL de tu video de 30 seg.
+             Podés usar un video de Cloudflare R2, S3, etc.         -->
+        <video id="ad-video"
+               src="https://www.w3schools.com/html/mov_bbb.mp4"
+               autoplay muted playsinline
+               onended="onVideoEnded()"
+               ontimeupdate="onTimeUpdate()">
+        </video>
+
+        <!-- OPCIÓN B ▸ VAST / IFRAME ─────────────────────────
+             Para usar un VAST tag de HilltopAds o Adsterra:
+             1. Comentá el <video> de arriba.
+             2. Descomentá el <iframe> de abajo.
+             3. Reemplazá la URL del src por tu VAST tag URL
+                codificada como URL (usa un player VAST como
+                player.vidazoo.com o ad-player.js).
+
+             Ejemplo con HilltopAds (VAST tag):
+             <iframe id="vast-iframe"
+               src="https://syndication.hilltopads.net/vast/?zoneid=TU_ZONE_ID&cb=[CACHEBUSTER]"
+               allow="autoplay; fullscreen"
+               sandbox="allow-scripts allow-same-origin">
+             </iframe>
+
+             Nota: los VAST tags deben renderizarse con un
+             VAST-compatible player. Se recomienda usar la lib
+             "IMA SDK" de Google, disponible en:
+             https://developers.google.com/interactive-media-ads
+        -->
+
+        <!-- Barra de progreso del video -->
+        <div id="video-progress-bar"></div>
+
+        <!-- Label PUBLICIDAD -->
+        <div id="pub-label">Publicidad</div>
+      </div>
+
+      <div class="flex flex-col items-center gap-2 mb-4">
+        <div class="relative" style="width:60px;height:60px;">
+          <svg width="60" height="60" viewBox="-4 -4 68 68" style="overflow:visible;">
+            <circle class="ring-bg" cx="30" cy="30" r="28"/>
+            <circle class="ring-progress" id="ring" cx="30" cy="30" r="28"/>
+          </svg>
+          <div id="ring-num"
+               class="absolute inset-0 flex items-center justify-center
+                      font-mono font-bold text-[16px] text-brand">
+            25
+          </div>
+        </div>
+        <span class="text-[11px] text-muted">segundos restantes</span>
+      </div>
+
+      <!-- Botón deshabilitado/habilitado -->
+      <button id="btn-skip" onclick="skipAd()">
+        Obtener código (esperá el contador)
+      </button>
+    </div><!-- /step-ad -->
+
+
+    <!-- ── STEP 2: Código generado ─────────────────────────── -->
+    <div id="step-code" class="hidden">
+
+      <div class="text-center text-[38px] mb-2">🎉</div>
+      <p class="text-center text-[11px] font-semibold text-muted uppercase tracking-widest mb-3">
+        Tu código de activación
+      </p>
+
+      <!-- Código -->
+      <div class="bg-bg rounded-[13px] p-5 text-center mb-2 border-[1.5px] border-brand">
+        <div class="code-number" id="code-display">0000000</div>
+      </div>
+      <p class="text-[11px] text-muted text-center mb-4">Tocá para copiar el código</p>
+
+      <!-- Botón copiar -->
+      <button onclick="copyCode()"
+        class="w-full bg-bg border-[1.5px] border-brand text-brand
+               rounded-xl py-3 text-[14px] font-semibold mb-4
+               hover:bg-[#ddd] transition-colors"
+        id="btn-copy">
+        📋 Copiar código
+      </button>
+
+      <hr class="border-t border-gray-100 my-3">
+
+      <!-- Promo tutorial -->
+      <div class="text-center mb-3">
+        <p class="text-[13px] text-muted leading-relaxed">
+          ¿No sabés cómo usarlo?<br>
+          <strong class="text-brand">Tutorial de instalación paso a paso</strong>
+        </p>
+      </div>
+      <a href="#" target="_blank"
+         class="w-full bg-brand text-white rounded-xl py-3.5 text-[15px] font-semibold
+                flex items-center justify-center gap-2 hover:opacity-85 transition-opacity
+                no-underline mb-2">
+        📖 Cómo instalar →
+      </a>
+
+      <div class="text-center mt-3">
+        <button onclick="resetAll()"
+                class="text-[12px] text-muted underline bg-transparent border-none cursor-pointer">
+          Generar otro código
+        </button>
+      </div>
+
+    </div><!-- /step-code -->
+
+  </div><!-- /sheet -->
+</div><!-- /overlay -->
+
+
+<!-- ════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ════════════════════════════════════════════════════════════ -->
+<script>
+/* ─── Config ──────────────────────────────────────────────────
+   DURATION: cuántos segundos esperar (igual al largo del video).
+   Cambiá este valor si tu anuncio dura más o menos.             */
+const DURATION = 25;
+
+/* ─── Estado interno ─────────────────────────────────────────── */
+let timer       = null;
+let currentCode = '';
+let brandIndex  = 0;
+const brands    = ['MagisTV', 'XuperTV'];
+const brandEl   = document.getElementById('brand-nav');
+const C         = 2 * Math.PI * 28; // circunferencia del ring (r=28)
+
+/* ─── Rotación de marca en el nav ────────────────────────────── */
+setInterval(() => {
+  brandEl.classList.add('swapping');
+  setTimeout(() => {
+    brandIndex = (brandIndex + 1) % brands.length;
+    brandEl.textContent = brands[brandIndex];
+    brandEl.classList.remove('swapping');
+  }, 250);
+}, 15000);
+
+/* ─── Generar código aleatorio de 7 dígitos ─────────────────── */
+function generateCode() {
+  return Math.floor(1000000 + Math.random() * 9000000).toString();
+}
+
+/* ─── Abrir modal ────────────────────────────────────────────── */
+function openSheet() {
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('overlay').classList.add('flex');
+  resetStepAd();
+  startCountdown();
+
+  // Intentar reproducir el video (puede bloquearse sin interacción)
+  const video = document.getElementById('ad-video');
+  if (video) {
+    video.currentTime = 0;
+    video.play().catch(() => {
+      // Si el autoplay falla, se confía en el contador de tiempo
+      console.log('Autoplay bloqueado — el contador igualmente cuenta.');
+    });
+  }
+}
+
+/* ─── Cerrar modal ───────────────────────────────────────────── */
+function closeSheet() {
+  clearInterval(timer);
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('overlay').classList.remove('flex');
+  const video = document.getElementById('ad-video');
+  if (video) video.pause();
+}
+
+/* ─── Clic en el fondo oscuro cierra el modal ───────────────── */
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('overlay')) closeSheet();
+}
+
+/* ─── Resetear el step de anuncio ───────────────────────────── */
+function resetStepAd() {
+  currentCode = generateCode();
+  document.getElementById('step-ad').classList.remove('hidden');
+  document.getElementById('step-code').classList.add('hidden');
+  document.getElementById('btn-skip').classList.remove('ready');
+  document.getElementById('btn-skip').textContent = 'Obtener código (esperá el contador)';
+  document.getElementById('ring-num').textContent = DURATION;
+  document.getElementById('ring').style.strokeDashoffset = 0;
+  document.getElementById('video-progress-bar').style.width = '0%';
+  updateDots(1);
+}
+
+/* ─── Contador de 30 seg ─────────────────────────────────────── */
+function startCountdown() {
+  let remaining = DURATION;
+
+  clearInterval(timer);
+  timer = setInterval(() => {
+    remaining--;
+    document.getElementById('ring-num').textContent = remaining;
+    // El offset aumenta conforme avanza el tiempo
+    document.getElementById('ring').style.strokeDashoffset =
+      C * (1 - remaining / DURATION);
+
+    if (remaining <= 0) {
+      clearInterval(timer);
+      unlockButton();
+    }
+  }, 1000);
+}
+
+/* ─── Cuando el video termina (si dura menos de 30 seg) ───────── */
+function onVideoEnded() {
+  // Si el video termina antes del contador, esperamos el countdown
+  // Si querés que termine inmediatamente, podés llamar unlockButton() acá.
+}
+
+/* ─── Barra de progreso sincronizada con el video ─────────────── */
+function onTimeUpdate() {
+  const video = document.getElementById('ad-video');
+  if (!video || !video.duration) return;
+  const pct = (video.currentTime / video.duration) * 100;
+  document.getElementById('video-progress-bar').style.width = pct + '%';
+}
+
+/* ─── Habilitar botón al llegar a 0 ─────────────────────────── */
+function unlockButton() {
+  const btn = document.getElementById('btn-skip');
+  btn.textContent = '🔓 Obtener mi código';
+  btn.classList.add('ready');
+}
+
+/* ─── Clic en "Obtener código" ───────────────────────────────── */
+function skipAd() {
+  if (!document.getElementById('btn-skip').classList.contains('ready')) return;
+  clearInterval(timer);
+  const video = document.getElementById('ad-video');
+  if (video) video.pause();
+
+  document.getElementById('step-ad').classList.add('hidden');
+  document.getElementById('step-code').classList.remove('hidden');
+  document.getElementById('code-display').textContent = currentCode;
+  updateDots(2);
+}
+
+/* ─── Copiar al portapapeles ─────────────────────────────────── */
+function copyCode() {
+  navigator.clipboard.writeText(currentCode).then(() => {
+    const b = document.getElementById('btn-copy');
+    b.textContent = '✅ ¡Copiado!';
+    setTimeout(() => { b.textContent = '📋 Copiar código'; }, 2000);
+  }).catch(() => {
+    // Fallback para navegadores sin clipboard API
+    const el = document.createElement('textarea');
+    el.value = currentCode;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    const b = document.getElementById('btn-copy');
+    b.textContent = '✅ ¡Copiado!';
+    setTimeout(() => { b.textContent = '📋 Copiar código'; }, 2000);
+  });
+}
+
+/* ─── Generar otro código ────────────────────────────────────── */
+function resetAll() {
+  closeSheet();
+  setTimeout(() => openSheet(), 220);
+}
+
+/* ─── Actualizar dots de paso ────────────────────────────────── */
+function updateDots(active) {
+  for (let i = 1; i <= 2; i++) {
+    const d = document.getElementById('dot' + i);
+    d.classList.remove('active', 'done');
+    if (i < active)  d.classList.add('done');
+    if (i === active) d.classList.add('active');
+  }
+}
+</script>
+
+</body>
+</html>
